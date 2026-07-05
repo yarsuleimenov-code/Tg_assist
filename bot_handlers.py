@@ -17,8 +17,8 @@ LOG_QUESTION_CHARS = 1000
 LOG_ANSWER_CHARS = 2500
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="/projects"), KeyboardButton(text="/skills")],
-        [KeyboardButton(text="/links"), KeyboardButton(text="/help")],
+        [KeyboardButton(text="Проекты"), KeyboardButton(text="Навыки")],
+        [KeyboardButton(text="Ссылки"), KeyboardButton(text="Помощь")],
     ],
     resize_keyboard=True,
     input_field_placeholder="Выберите команду или задайте вопрос",
@@ -338,6 +338,7 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
         "что ты умеешь",
         "что умеешь",
         "помощь",
+        "/help",
         "команды",
         "help",
         "что можно спросить",
@@ -354,13 +355,14 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
             ]
         )
 
-    if normalized in {"покажи проекты", "список проектов", "проекты", "дай проекты"}:
+    if normalized in {"/projects", "покажи проекты", "список проектов", "проекты", "дай проекты"}:
         return knowledge_base.get_document_text("projects.md")
 
-    if normalized in {"покажи навыки", "список навыков", "навыки", "дай навыки"}:
+    if normalized in {"/skills", "покажи навыки", "список навыков", "навыки", "дай навыки"}:
         return knowledge_base.get_document_text("skills.md")
 
     if normalized in {
+        "/links",
         "покажи ссылки",
         "дай ссылки",
         "ссылки",
