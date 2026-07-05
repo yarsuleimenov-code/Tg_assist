@@ -95,6 +95,14 @@ class KnowledgeBase:
                 return document.content
         return "В доступных материалах нет информации по этому вопросу."
 
+    def build_context_from_files(self, file_names: tuple[str, ...], max_chars: int) -> str:
+        matches = [
+            KnowledgeMatch(document=document, score=1)
+            for document in self.documents
+            if document.path.name in file_names
+        ]
+        return self.build_context(matches, max_chars=max_chars)
+
     @staticmethod
     def _extract_title(content: str) -> str | None:
         for line in content.splitlines():

@@ -67,6 +67,31 @@ def create_router(
 
         matches = knowledge_base.search(question)
         if not matches:
+            if _is_general_portfolio_question(question):
+                context = knowledge_base.build_context_from_files(
+                    ("profile.md", "projects.md", "skills.md", "links.md"),
+                    max_chars=max_context_chars,
+                )
+                recent_messages = memory.get_user_messages(chat_id)
+
+                try:
+                    answer = await openai_client.generate_answer(
+                        question=question,
+                        context=context,
+                        recent_user_messages=recent_messages,
+                    )
+                except Exception:
+                    logging.exception("Failed to answer general question chat_id=%s", chat_id)
+                    await _answer(
+                        message,
+                        "Не удалось сформировать ответ из-за технической ошибки. Попробуйте позже.",
+                    )
+                    return
+
+                memory.add_user_message(chat_id, question)
+                await _answer(message, answer or NO_INFORMATION_MESSAGE)
+                return
+
             memory.add_user_message(chat_id, question)
             await _answer(message, NO_INFORMATION_MESSAGE)
             return
@@ -119,3 +144,22 @@ def _chunks(text: str, limit: int) -> list[str]:
         chunks.append("\n".join(current))
 
     return chunks
+
+
+def _is_general_portfolio_question(text: str) -> bool:
+    normalized = text.lower().strip()
+    markers = (
+        "что ты знаешь",
+        "расскажи",
+        "кто такой",
+        "кто кандидат",
+        "о кандидате",
+        "о ярославе",
+        "чем полезен",
+        "что умеет",
+        "почему его стоит",
+        "почему стоит",
+        "кратко о",
+        "профиль",
+    )
+    return any(marker in normalized for marker in markers)
