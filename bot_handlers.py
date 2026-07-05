@@ -55,6 +55,30 @@ PROJECTS_OVERVIEW = "\n".join(
         "Если нужно, могу раскрыть любой проект отдельно: бизнес-задача, роль Ярослава, результат, стек или ссылка на демо.",
     ]
 )
+LINKS_OVERVIEW = "\n".join(
+    [
+        "Публичные страницы Ярослава собраны так, чтобы быстро показать не только резюме, но и практический уровень: проекты можно открыть, проверить и обсудить на интервью.",
+        "",
+        "1. Основное портфолио",
+        "Короткая витрина опыта, проектов, кейсов и ссылок кандидата.",
+        "https://yarsuleimenov-code.github.io/ys-analytics/",
+        "",
+        "2. Резюме и профессиональный профиль",
+        "CV PDF: https://yarsuleimenov-code.github.io/ys-analytics/assets/Yaroslav_Suleimenov_CV.pdf",
+        "LinkedIn: https://www.linkedin.com/in/yaroslav-suleimenov-380822363/",
+        "HH: https://karaganda.hh.kz/resume/7cb80dacff0ebc71240039ed1f317635616543",
+        "",
+        "3. Демо проектов",
+        "Zaberman Calculator: https://yarsuleimenov-code.github.io/Zaberman_calc/orders.html",
+        "Family Menu: https://yarsuleimenov-code.github.io/Family_menu/plan",
+        "IITU OLAP Course: https://yarsuleimenov-code.github.io/IITU_OLAP_Course/",
+        "",
+        "4. Контакт",
+        "Telegram: https://t.me/Yar_Suleimenov",
+        "",
+        "Если нужно оценить кандидата быстро, начните с портфолио и Zaberman Calculator: они лучше всего показывают связку BA-мышления, продуктовой логики и реализации.",
+    ]
+)
 
 
 def create_router(
@@ -108,7 +132,7 @@ def create_router(
 
     @router.message(Command("links"))
     async def links(message: Message) -> None:
-        await _answer(message, knowledge_base.get_document_text("links.md"), log_chat_id=log_chat_id)
+        await _answer(message, LINKS_OVERVIEW, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
 
     @router.message(F.text)
     async def answer_question(message: Message) -> None:
@@ -398,7 +422,7 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
         "linkedin",
         "резюме",
     }:
-        return knowledge_base.get_document_text("links.md")
+        return LINKS_OVERVIEW
 
     if normalized in {
         "что ты знаешь",
