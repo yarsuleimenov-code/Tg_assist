@@ -3,7 +3,7 @@ import re
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
 from intent_router import Intent, IntentResult, is_general_portfolio_question, parse_llm_intent, route_intent
 from knowledge_loader import KnowledgeBase
@@ -15,6 +15,14 @@ TECHNICAL_ERROR_MESSAGE = "Не удалось сформировать отве
 MAX_ANSWER_CHARS = 1500
 LOG_QUESTION_CHARS = 1000
 LOG_ANSWER_CHARS = 2500
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="/projects"), KeyboardButton(text="/skills")],
+        [KeyboardButton(text="/links"), KeyboardButton(text="/help")],
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Выберите команду или задайте вопрос",
+)
 GREETING_MESSAGE = (
     "Здравствуйте. Я ИИслав, цифровой помощник Ярослава Сулейменова. "
     "Могу ответить на вопросы о его опыте, проектах, навыках и ссылках портфолио. "
@@ -244,8 +252,9 @@ async def _answer(
     log_chat_id: str | None = None,
 ) -> None:
     text = _apply_guardrails(text, mode=mode)
-    for chunk in _chunks(text.strip(), limit=3900):
-        await message.answer(chunk)
+    chunks = _chunks(text.strip(), limit=3900)
+    for index, chunk in enumerate(chunks):
+        await message.answer(chunk, reply_markup=MAIN_KEYBOARD if index == 0 else None)
     await _send_interaction_log(message, text, log_chat_id)
 
 
