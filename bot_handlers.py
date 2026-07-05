@@ -79,6 +79,33 @@ LINKS_OVERVIEW = "\n".join(
         "Если нужно оценить кандидата быстро, начните с портфолио и Zaberman Calculator: они лучше всего показывают связку BA-мышления, продуктовой логики и реализации.",
     ]
 )
+SKILLS_OVERVIEW = "\n".join(
+    [
+        "Ключевая ценность Ярослава — он соединяет бизнес-анализ, продуктовую логику, данные и практическую реализацию. Благодаря сильному опыту в B2B-продажах он понимает не только требования, но и коммерческий смысл решений: потребности клиента, ценность для бизнеса, влияние на сделку, маржинальность и операционный результат.",
+        "",
+        "1. Business Analysis",
+        "Быстро раскладывает бизнес-задачу на требования, сценарии, роли, ограничения и критерии готовности.",
+        "Ценность: меньше размытых задач, меньше переделок, понятнее handoff в разработку.",
+        "",
+        "2. Product Thinking",
+        "Смотрит на требования через бизнес-ценность, MVP scope и основной пользовательский сценарий.",
+        "Ценность: помогает не строить лишнее и быстрее проверить гипотезу.",
+        "",
+        "3. System Analysis",
+        "Проектирует сущности, статусы, lifecycle, правила полей, интеграционные границы и edge cases.",
+        "Ценность: снижает неоднозначность логики и заранее подсвечивает слабые места системы.",
+        "",
+        "4. Data Analytics & Reporting",
+        "Работает с SQL, Excel, Power BI, KPI, отчетностью, сегментацией и проверкой качества данных.",
+        "Ценность: помогает видеть не просто цифры, а причины, отклонения и точки роста.",
+        "",
+        "5. Product Engineering Mindset",
+        "Может собрать прототип, демо или low-code решение, чтобы быстро показать идею в работе.",
+        "Ценность: меньше разрыва между 'описали' и 'проверили на практике'.",
+        "",
+        "Если коротко: Ярослав полезен там, где нужно связать бизнес-задачу, клиента, требования, данные и MVP-реализацию.",
+    ]
+)
 
 
 def create_router(
@@ -128,7 +155,7 @@ def create_router(
 
     @router.message(Command("skills"))
     async def skills(message: Message) -> None:
-        await _answer(message, knowledge_base.get_document_text("skills.md"), log_chat_id=log_chat_id)
+        await _answer(message, SKILLS_OVERVIEW, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
 
     @router.message(Command("links"))
     async def links(message: Message) -> None:
@@ -410,7 +437,7 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
         return PROJECTS_OVERVIEW
 
     if normalized in {"/skills", "покажи навыки", "список навыков", "навыки", "дай навыки"}:
-        return knowledge_base.get_document_text("skills.md")
+        return SKILLS_OVERVIEW
 
     if normalized in {
         "/links",
