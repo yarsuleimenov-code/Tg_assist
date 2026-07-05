@@ -16,11 +16,11 @@ MVP личного AI-ассистента для портфолио Business An
 ## Бизнес-логика
 
 1. HR задает вопрос о кандидате.
-2. Бот классифицирует вопрос как portfolio или professional.
-3. Для portfolio-вопроса бот ищет совпадения в `knowledge/*.md`.
-4. В DeepSeek передается только найденный контекст, системный промпт и последние вопросы пользователя.
+2. Бот определяет intent: `portfolio_question`, `professional_question`, `clarification_needed` или `out_of_scope`.
+3. Сначала используется rule-based routing. LLM-router вызывается только при низкой уверенности.
+4. Для portfolio-вопроса бот ищет релевантные чанки в `knowledge/*.md` и передает в DeepSeek только top relevant chunks.
 5. Модель отвечает о кандидате только на основании подготовленных материалов.
-6. Для professional-вопроса бот отвечает через DeepSeek без привязки к knowledge base, но не выдумывает факты о кандидате.
+6. Для professional-вопроса бот отвечает через DeepSeek кратко, без генерации полноценных BA-документов и без выдумывания фактов о кандидате.
 7. Для быстрых сценариев есть команды `/projects`, `/skills`, `/links`.
 
 ## Структура
@@ -32,6 +32,7 @@ MVP личного AI-ассистента для портфолио Business An
 ├── bot_handlers.py
 ├── openai_client.py
 ├── knowledge_loader.py
+├── intent_router.py
 ├── memory.py
 ├── prompts.py
 ├── knowledge/
@@ -64,9 +65,9 @@ MVP личного AI-ассистента для портфолио Business An
 
 ### Professional mode
 
-Используется для вопросов по бизнес-анализу, продуктовой логике, требованиям, процессам, KPI, data contracts, MVP и системному анализу.
+Используется для вопросов по бизнес-анализу, продуктовой логике, требованиям, процессам, KPI, MVP и системному анализу.
 
-Правило: бот может использовать общие знания модели, но не должен выдумывать факты о кандидате.
+Правило: бот может использовать общие знания модели, но не должен выдумывать факты о кандидате. По умолчанию ответы короткие, до 1200-1500 символов. Бот не создает полноценные BRD, BPMN, user stories, data contracts и другие большие артефакты.
 
 ## Запуск локально
 
@@ -95,7 +96,6 @@ TELEGRAM_BOT_TOKEN=
 OPENAI_API_KEY=
 DEEPSEEK_API_BASE=https://api.deepseek.com/v1
 DEEPSEEK_MODEL=deepseek-chat
-MAX_HISTORY_MESSAGES=6
 MAX_CONTEXT_CHARS=6000
 ```
 
@@ -131,8 +131,8 @@ docker run --env-file .env ba-portfolio-assistant
 
 ## Ограничения MVP
 
-- Поиск релевантности простой keyword-based, без vector database.
-- История последних 6 сообщений хранится в памяти процесса и сбрасывается после перезапуска.
+- Поиск релевантности простой chunked keyword-based, без vector database.
+- Память минимальная: last mode, last topic, last user question. Полная история диалога не хранится.
 - Нет админ-панели для редактирования knowledge base.
 - Нет авторизации пользователей.
 

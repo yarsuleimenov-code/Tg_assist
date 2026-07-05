@@ -10,7 +10,6 @@ class Settings:
     openai_api_key: str
     deepseek_api_base: str
     deepseek_model: str
-    max_history_messages: int
     max_context_chars: int
 
 
@@ -33,6 +32,5 @@ def load_settings() -> Settings:
         openai_api_key=openai_api_key,
         deepseek_api_base=os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1").rstrip("/"),
         deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-        max_history_messages=int(os.getenv("MAX_HISTORY_MESSAGES", "6")),
         max_context_chars=int(os.getenv("MAX_CONTEXT_CHARS", "6000")),
     )

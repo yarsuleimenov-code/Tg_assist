@@ -28,7 +28,7 @@ async def main() -> None:
         api_base=settings.deepseek_api_base,
         model=settings.deepseek_model,
     )
-    memory = ChatMemory(limit=settings.max_history_messages)
+    memory = ChatMemory()
 
     bot = Bot(token=settings.telegram_bot_token)
     dispatcher = Dispatcher()

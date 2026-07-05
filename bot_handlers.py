@@ -5,12 +5,14 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
+from intent_router import Intent, IntentResult, is_general_portfolio_question, parse_llm_intent, route_intent
 from knowledge_loader import KnowledgeBase
 from memory import ChatMemory
 from openai_client import OpenAIClient
 
 NO_INFORMATION_MESSAGE = "В доступных материалах нет информации по этому вопросу."
 TECHNICAL_ERROR_MESSAGE = "Не удалось сформировать ответ из-за технической ошибки. Попробуйте позже."
+MAX_ANSWER_CHARS = 1500
 
 
 def create_router(
@@ -27,7 +29,7 @@ def create_router(
             message,
             "Здравствуйте. Я личный AI-ассистент кандидата Business Analyst. "
             "Отвечаю на вопросы об опыте, проектах, навыках и ссылках портфолио. "
-            "Также могу поддержать профессиональный диалог по бизнес-анализу, требованиям, процессам, KPI и MVP.",
+            "Также могу кратко обсудить профессиональные темы: требования, процессы, KPI, MVP и продуктовую логику.",
         )
 
     @router.message(Command("help"))
@@ -37,17 +39,16 @@ def create_router(
             "\n".join(
                 [
                     "Примеры вопросов о кандидате:",
-                    "- Какой опыт у кандидата в бизнес-анализе?",
                     "- Какие проекты есть в портфолио?",
                     "- Какие навыки кандидата релевантны для BA-роли?",
+                    "- Есть ли кейсы по MVP или аналитике?",
                     "- Где посмотреть резюме, GitHub или LinkedIn?",
                     "",
                     "Примеры профессиональных вопросов:",
-                    "- Как правильно описать acceptance criteria?",
                     "- Как определить scope MVP?",
+                    "- Как описать acceptance criteria?",
                     "- Чем user story отличается от use case?",
-                    "- Как спроектировать KPI dashboard?",
-                    "- Как описать data contract для API?",
+                    "- Как выбрать KPI для dashboard?",
                     "",
                     "Команды: /projects, /skills, /links",
                 ]
@@ -72,12 +73,25 @@ def create_router(
         chat_id = message.chat.id
         user_id = message.from_user.id if message.from_user else None
 
-        logging.info("Incoming question chat_id=%s user_id=%s text=%r", chat_id, user_id, question)
+        route = route_intent(question)
+        if route.needs_llm:
+            route = await _resolve_low_confidence_route(question, route, openai_client, chat_id)
 
-        if _is_portfolio_question(question):
+        logging.info(
+            "Incoming question chat_id=%s user_id=%s intent=%s confidence=%.2f topic=%s text=%r",
+            chat_id,
+            user_id,
+            route.intent.value,
+            route.confidence,
+            route.topic,
+            question,
+        )
+
+        if route.intent == Intent.PORTFOLIO:
             await _answer_portfolio_question(
                 message=message,
                 question=question,
+                route=route,
                 chat_id=chat_id,
                 knowledge_base=knowledge_base,
                 openai_client=openai_client,
@@ -86,20 +100,46 @@ def create_router(
             )
             return
 
-        await _answer_professional_question(
-            message=message,
-            question=question,
-            chat_id=chat_id,
-            openai_client=openai_client,
-            memory=memory,
-        )
+        if route.intent == Intent.PROFESSIONAL:
+            await _answer_professional_question(
+                message=message,
+                question=question,
+                route=route,
+                chat_id=chat_id,
+                openai_client=openai_client,
+                memory=memory,
+            )
+            return
+
+        if route.intent == Intent.CLARIFICATION:
+            memory.update(chat_id, route.intent.value, route.topic, question)
+            await _answer(message, _clarification_message())
+            return
+
+        memory.update(chat_id, route.intent.value, route.topic, question)
+        await _answer(message, _out_of_scope_message())
 
     return router
+
+
+async def _resolve_low_confidence_route(
+    question: str,
+    route: IntentResult,
+    openai_client: OpenAIClient,
+    chat_id: int,
+) -> IntentResult:
+    try:
+        label = await openai_client.classify_intent(question)
+    except Exception:
+        logging.exception("Failed to classify intent chat_id=%s", chat_id)
+        return route
+    return parse_llm_intent(label, fallback=route)
 
 
 async def _answer_portfolio_question(
     message: Message,
     question: str,
+    route: IntentResult,
     chat_id: int,
     knowledge_base: KnowledgeBase,
     openai_client: OpenAIClient,
@@ -109,60 +149,64 @@ async def _answer_portfolio_question(
     matches = knowledge_base.search(question)
     if matches:
         context = knowledge_base.build_context(matches, max_chars=max_context_chars)
-    elif _is_general_portfolio_question(question):
+    elif is_general_portfolio_question(question):
         context = knowledge_base.build_context_from_files(
             ("profile.md", "projects.md", "skills.md", "links.md"),
             max_chars=max_context_chars,
         )
     else:
-        memory.add_user_message(chat_id, question)
+        memory.update(chat_id, route.intent.value, route.topic, question)
         await _answer(message, NO_INFORMATION_MESSAGE)
         return
-
-    recent_messages = memory.get_user_messages(chat_id)
 
     try:
         answer = await openai_client.generate_answer(
             question=question,
             context=context,
-            recent_user_messages=recent_messages,
+            memory_context=memory.get_prompt_context(chat_id),
         )
     except Exception:
         logging.exception("Failed to answer portfolio question chat_id=%s", chat_id)
         await _answer(message, TECHNICAL_ERROR_MESSAGE)
         return
 
-    memory.add_user_message(chat_id, question)
-    await _answer(message, answer or NO_INFORMATION_MESSAGE)
+    memory.update(chat_id, route.intent.value, route.topic, question)
+    await _answer(message, answer or NO_INFORMATION_MESSAGE, mode=route.intent)
 
 
 async def _answer_professional_question(
     message: Message,
     question: str,
+    route: IntentResult,
     chat_id: int,
     openai_client: OpenAIClient,
     memory: ChatMemory,
 ) -> None:
-    recent_messages = memory.get_user_messages(chat_id)
-
     try:
         answer = await openai_client.generate_professional_answer(
             question=question,
-            recent_user_messages=recent_messages,
+            memory_context=memory.get_prompt_context(chat_id),
         )
     except Exception:
         logging.exception("Failed to answer professional question chat_id=%s", chat_id)
         await _answer(message, TECHNICAL_ERROR_MESSAGE)
         return
 
-    memory.add_user_message(chat_id, question)
-    await _answer(message, answer or TECHNICAL_ERROR_MESSAGE)
+    memory.update(chat_id, route.intent.value, route.topic, question)
+    await _answer(message, answer or TECHNICAL_ERROR_MESSAGE, mode=route.intent)
 
 
-async def _answer(message: Message, text: str) -> None:
-    text = _format_telegram_text(text)
+async def _answer(message: Message, text: str, mode: Intent | None = None) -> None:
+    text = _apply_guardrails(text, mode=mode)
     for chunk in _chunks(text.strip(), limit=3900):
         await message.answer(chunk)
+
+
+def _apply_guardrails(text: str, mode: Intent | None = None) -> str:
+    cleaned = _format_telegram_text(text)
+    if mode in {Intent.PORTFOLIO, Intent.PROFESSIONAL} and len(cleaned) > MAX_ANSWER_CHARS:
+        cleaned = _trim_to_limit(cleaned, MAX_ANSWER_CHARS)
+    return cleaned or TECHNICAL_ERROR_MESSAGE
 
 
 def _format_telegram_text(text: str) -> str:
@@ -195,6 +239,35 @@ def _format_telegram_text(text: str) -> str:
         lines.append(line)
 
     return _collapse_blank_lines("\n".join(lines))
+
+
+def _trim_to_limit(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+
+    suffix = "\n\nМогу раскрыть подробнее по конкретному пункту."
+    body_limit = max(200, limit - len(suffix) - 1)
+    trimmed = text[:body_limit].rsplit(".", maxsplit=1)[0].strip()
+    if len(trimmed) < body_limit * 0.6:
+        trimmed = text[:body_limit].rsplit("\n", maxsplit=1)[0].strip()
+    if not trimmed:
+        trimmed = text[:body_limit].strip()
+    return f"{trimmed}.{suffix}"
+
+
+def _clarification_message() -> str:
+    return (
+        "Уточните, пожалуйста, контекст.\n"
+        "1. Вопрос про кандидата и его портфолио или про профессиональную BA-тему?\n"
+        "2. Какой результат нужен: краткое объяснение, пример или рекомендация?"
+    )
+
+
+def _out_of_scope_message() -> str:
+    return (
+        "Я полезен для вопросов о портфолио кандидата и профессиональных темах Business Analysis, "
+        "Product, System Analysis, KPI, требованиях и процессах. По этому вопросу лучше использовать другой источник."
+    )
 
 
 def _is_markdown_table_row(line: str) -> bool:
@@ -232,59 +305,3 @@ def _chunks(text: str, limit: int) -> list[str]:
         chunks.append("\n".join(current))
 
     return chunks
-
-
-def _is_portfolio_question(text: str) -> bool:
-    normalized = text.lower().strip()
-    markers = (
-        "кандидат",
-        "ярослав",
-        "сулейменов",
-        "портфолио",
-        "проект",
-        "проекты",
-        "кейс",
-        "кейсы",
-        "опыт",
-        "резюме",
-        "github",
-        "linkedin",
-        "hh",
-        "ссылк",
-        "контакт",
-        "навыки кандидата",
-        "где работал",
-        "smartquote",
-        "zaberman",
-        "warehouse",
-        "loading control",
-        "client tracker",
-        "family menu",
-        "ys-analytics",
-        "olap course",
-        "iitu",
-    )
-    return _is_general_portfolio_question(normalized) or any(marker in normalized for marker in markers)
-
-
-def _is_general_portfolio_question(text: str) -> bool:
-    normalized = text.lower().strip()
-    markers = (
-        "что ты знаешь",
-        "расскажи о себе",
-        "расскажи о кандидате",
-        "расскажи про кандидата",
-        "расскажи о ярославе",
-        "расскажи про ярослава",
-        "кто такой",
-        "кто кандидат",
-        "о кандидате",
-        "о ярославе",
-        "чем полезен кандидат",
-        "что умеет кандидат",
-        "почему его стоит",
-        "почему стоит рассмотреть",
-        "кратко о кандидате",
-        "профиль кандидата",
-    )
-    return any(marker in normalized for marker in markers)

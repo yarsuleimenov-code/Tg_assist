@@ -3,8 +3,10 @@ import logging
 import aiohttp
 
 from prompts import (
+    INTENT_ROUTER_SYSTEM_PROMPT,
     PORTFOLIO_SYSTEM_PROMPT,
     PROFESSIONAL_SYSTEM_PROMPT,
+    build_intent_prompt,
     build_portfolio_prompt,
     build_professional_prompt,
 )
@@ -20,30 +22,40 @@ class OpenAIClient:
         self,
         question: str,
         context: str,
-        recent_user_messages: list[str],
+        memory_context: str,
     ) -> str:
         return await self._chat_completion(
             system_prompt=PORTFOLIO_SYSTEM_PROMPT,
             user_prompt=build_portfolio_prompt(
                 question=question,
                 context=context,
-                recent_user_messages=recent_user_messages,
+                memory_context=memory_context,
             ),
             temperature=0.2,
+            max_tokens=500,
         )
 
     async def generate_professional_answer(
         self,
         question: str,
-        recent_user_messages: list[str],
+        memory_context: str,
     ) -> str:
         return await self._chat_completion(
             system_prompt=PROFESSIONAL_SYSTEM_PROMPT,
             user_prompt=build_professional_prompt(
                 question=question,
-                recent_user_messages=recent_user_messages,
+                memory_context=memory_context,
             ),
             temperature=0.4,
+            max_tokens=430,
+        )
+
+    async def classify_intent(self, question: str) -> str:
+        return await self._chat_completion(
+            system_prompt=INTENT_ROUTER_SYSTEM_PROMPT,
+            user_prompt=build_intent_prompt(question),
+            temperature=0.0,
+            max_tokens=20,
         )
 
     async def _chat_completion(
@@ -51,11 +63,12 @@ class OpenAIClient:
         system_prompt: str,
         user_prompt: str,
         temperature: float,
+        max_tokens: int,
     ) -> str:
         payload = {
             "model": self.model,
             "temperature": temperature,
-            "max_tokens": 700,
+            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

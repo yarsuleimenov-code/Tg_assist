@@ -10,7 +10,7 @@ MVP Telegram AI assistant for a Business Analyst portfolio. The bot answers HR/r
 - Telegram professional question -> DeepSeek chat answer in Senior BA / Product Manager style.
 - Commands: `/start`, `/help`, `/projects`, `/skills`, `/links`.
 - Local knowledge base in `knowledge/*.md`.
-- Simple in-memory history of the last 6 user messages.
+- Minimal in-memory dialogue state: last mode, last topic, last user question.
 - Logging for requests and errors.
 - Docker-ready and safe for GitHub publication.
 
@@ -20,7 +20,9 @@ MVP Telegram AI assistant for a Business Analyst portfolio. The bot answers HR/r
 - Do not add a database, vector store, admin panel, or complex RAG until there is a business need.
 - Do not hardcode secrets.
 - Knowledge base content must be treated as the only factual source for answers about the candidate, portfolio, experience, projects, skills, and links.
-- Professional answers may use the model's general knowledge, but must not invent facts about the candidate.
+- Intent routing is rule-based first. LLM classification is allowed only for low-confidence questions.
+- Knowledge base search uses small Markdown chunks with metadata and keyword scoring. Do not add vector DB until there is a clear business need.
+- Professional answers may use the model's general knowledge, but must be short and must not invent facts about the candidate.
 - Prefer minimal diffs and avoid unrelated refactoring.
 
 ## Before Publication
