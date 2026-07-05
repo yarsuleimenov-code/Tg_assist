@@ -24,4 +24,4 @@
 - Портфолио: https://yarsuleimenov-code.github.io/ys-analytics/
 - Учебный курс IITU OLAP Course: https://yarsuleimenov-code.github.io/IITU_OLAP_Course/
 - Планировщик ужинов Family Menu: https://yarsuleimenov-code.github.io/Family_menu/plan
-- Калькулятор Zaberman: https://yarsuleimenov-code.github.io/Zaberman_calc/orders.html
+- Калькулятор Zaberman: https://yarsuleimenov-code.github.io/Zaberman_calc/index.html

@@ -31,7 +31,7 @@ Python, aiogram, DeepSeek API, python-dotenv, Markdown, Docker, GitHub, Google C
 - `E:\Codex\Calc_project`
 - `https://github.com/yarsuleimenov-code/SmartQuote`
 - `https://github.com/yarsuleimenov-code/Zaberman_calc`
-- Готовая демонстрационная версия: `https://yarsuleimenov-code.github.io/Zaberman_calc/orders.html`
+- Готовая демонстрационная версия: `https://yarsuleimenov-code.github.io/Zaberman_calc/index.html`
 
 Бизнес-задача:
 снизить ручные расчеты, стандартизировать pricing logic, ускорить создание quote и сделать расчет объяснимым для broker/admin/CEO review.
