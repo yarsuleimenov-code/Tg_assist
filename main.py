@@ -38,6 +38,7 @@ async def main() -> None:
             openai_client=openai_client,
             memory=memory,
             max_context_chars=settings.max_context_chars,
+            log_chat_id=settings.log_chat_id,
         )
     )
 

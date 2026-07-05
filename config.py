@@ -11,6 +11,7 @@ class Settings:
     deepseek_api_base: str
     deepseek_model: str
     max_context_chars: int
+    log_chat_id: str | None
 
 
 def load_settings() -> Settings:
@@ -33,4 +34,5 @@ def load_settings() -> Settings:
         deepseek_api_base=os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1").rstrip("/"),
         deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         max_context_chars=int(os.getenv("MAX_CONTEXT_CHARS", "6000")),
+        log_chat_id=os.getenv("LOG_CHAT_ID", "").strip() or None,
     )

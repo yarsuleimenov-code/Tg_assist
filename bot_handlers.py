@@ -13,6 +13,8 @@ from openai_client import OpenAIClient
 NO_INFORMATION_MESSAGE = "В доступных материалах нет информации по этому вопросу."
 TECHNICAL_ERROR_MESSAGE = "Не удалось сформировать ответ из-за технической ошибки. Попробуйте позже."
 MAX_ANSWER_CHARS = 1500
+LOG_QUESTION_CHARS = 1000
+LOG_ANSWER_CHARS = 2500
 
 
 def create_router(
@@ -20,6 +22,7 @@ def create_router(
     openai_client: OpenAIClient,
     memory: ChatMemory,
     max_context_chars: int,
+    log_chat_id: str | None = None,
 ) -> Router:
     router = Router()
 
@@ -30,6 +33,7 @@ def create_router(
             "Здравствуйте. Я личный AI-ассистент кандидата Business Analyst. "
             "Отвечаю на вопросы об опыте, проектах, навыках и ссылках портфолио. "
             "Также могу кратко обсудить профессиональные темы: требования, процессы, KPI, MVP и продуктовую логику.",
+            log_chat_id=log_chat_id,
         )
 
     @router.message(Command("help"))
@@ -53,19 +57,20 @@ def create_router(
                     "Команды: /projects, /skills, /links",
                 ]
             ),
+            log_chat_id=log_chat_id,
         )
 
     @router.message(Command("projects"))
     async def projects(message: Message) -> None:
-        await _answer(message, knowledge_base.get_document_text("projects.md"))
+        await _answer(message, knowledge_base.get_document_text("projects.md"), log_chat_id=log_chat_id)
 
     @router.message(Command("skills"))
     async def skills(message: Message) -> None:
-        await _answer(message, knowledge_base.get_document_text("skills.md"))
+        await _answer(message, knowledge_base.get_document_text("skills.md"), log_chat_id=log_chat_id)
 
     @router.message(Command("links"))
     async def links(message: Message) -> None:
-        await _answer(message, knowledge_base.get_document_text("links.md"))
+        await _answer(message, knowledge_base.get_document_text("links.md"), log_chat_id=log_chat_id)
 
     @router.message(F.text)
     async def answer_question(message: Message) -> None:
@@ -97,6 +102,7 @@ def create_router(
                 openai_client=openai_client,
                 memory=memory,
                 max_context_chars=max_context_chars,
+                log_chat_id=log_chat_id,
             )
             return
 
@@ -108,16 +114,17 @@ def create_router(
                 chat_id=chat_id,
                 openai_client=openai_client,
                 memory=memory,
+                log_chat_id=log_chat_id,
             )
             return
 
         if route.intent == Intent.CLARIFICATION:
             memory.update(chat_id, route.intent.value, route.topic, question)
-            await _answer(message, _clarification_message())
+            await _answer(message, _clarification_message(), log_chat_id=log_chat_id)
             return
 
         memory.update(chat_id, route.intent.value, route.topic, question)
-        await _answer(message, _out_of_scope_message())
+        await _answer(message, _out_of_scope_message(), log_chat_id=log_chat_id)
 
     return router
 
@@ -145,6 +152,7 @@ async def _answer_portfolio_question(
     openai_client: OpenAIClient,
     memory: ChatMemory,
     max_context_chars: int,
+    log_chat_id: str | None,
 ) -> None:
     matches = knowledge_base.search(question)
     if matches:
@@ -156,7 +164,7 @@ async def _answer_portfolio_question(
         )
     else:
         memory.update(chat_id, route.intent.value, route.topic, question)
-        await _answer(message, NO_INFORMATION_MESSAGE)
+        await _answer(message, NO_INFORMATION_MESSAGE, log_chat_id=log_chat_id)
         return
 
     try:
@@ -167,11 +175,11 @@ async def _answer_portfolio_question(
         )
     except Exception:
         logging.exception("Failed to answer portfolio question chat_id=%s", chat_id)
-        await _answer(message, TECHNICAL_ERROR_MESSAGE)
+        await _answer(message, TECHNICAL_ERROR_MESSAGE, log_chat_id=log_chat_id)
         return
 
     memory.update(chat_id, route.intent.value, route.topic, question)
-    await _answer(message, answer or NO_INFORMATION_MESSAGE, mode=route.intent)
+    await _answer(message, answer or NO_INFORMATION_MESSAGE, mode=route.intent, log_chat_id=log_chat_id)
 
 
 async def _answer_professional_question(
@@ -181,6 +189,7 @@ async def _answer_professional_question(
     chat_id: int,
     openai_client: OpenAIClient,
     memory: ChatMemory,
+    log_chat_id: str | None,
 ) -> None:
     try:
         answer = await openai_client.generate_professional_answer(
@@ -189,17 +198,83 @@ async def _answer_professional_question(
         )
     except Exception:
         logging.exception("Failed to answer professional question chat_id=%s", chat_id)
-        await _answer(message, TECHNICAL_ERROR_MESSAGE)
+        await _answer(message, TECHNICAL_ERROR_MESSAGE, log_chat_id=log_chat_id)
         return
 
     memory.update(chat_id, route.intent.value, route.topic, question)
-    await _answer(message, answer or TECHNICAL_ERROR_MESSAGE, mode=route.intent)
+    await _answer(message, answer or TECHNICAL_ERROR_MESSAGE, mode=route.intent, log_chat_id=log_chat_id)
 
 
-async def _answer(message: Message, text: str, mode: Intent | None = None) -> None:
+async def _answer(
+    message: Message,
+    text: str,
+    mode: Intent | None = None,
+    log_chat_id: str | None = None,
+) -> None:
     text = _apply_guardrails(text, mode=mode)
     for chunk in _chunks(text.strip(), limit=3900):
         await message.answer(chunk)
+    await _send_interaction_log(message, text, log_chat_id)
+
+
+async def _send_interaction_log(message: Message, answer: str, log_chat_id: str | None) -> None:
+    if not log_chat_id:
+        return
+
+    try:
+        await message.bot.send_message(
+            chat_id=log_chat_id,
+            text=_build_interaction_log(message, answer),
+            parse_mode=None,
+        )
+    except Exception:
+        user_id = message.from_user.id if message.from_user else None
+        logging.exception(
+            "Failed to send interaction log chat_id=%s user_id=%s log_chat_id=%s",
+            message.chat.id,
+            user_id,
+            log_chat_id,
+        )
+
+
+def _build_interaction_log(message: Message, answer: str) -> str:
+    user = message.from_user
+    user_id = user.id if user else None
+    question = _truncate_for_log((message.text or "").strip(), LOG_QUESTION_CHARS)
+    answer = _truncate_for_log(answer.strip(), LOG_ANSWER_CHARS)
+
+    if user and user.username:
+        user_label = f"@{user.username}"
+    elif user and user.first_name:
+        user_label = f"{user.first_name} / {user.id}"
+    elif user_id:
+        user_label = str(user_id)
+    else:
+        user_label = "unknown"
+
+    return "\n".join(
+        [
+            "New bot interaction",
+            "",
+            f"User: {user_label}",
+            f"User ID: {user_id or 'unknown'}",
+            "",
+            "Question:",
+            question,
+            "",
+            "Answer:",
+            answer,
+        ]
+    )
+
+
+def _truncate_for_log(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+
+    suffix = "\n...[truncated]"
+    body_limit = max(0, limit - len(suffix))
+    return f"{text[:body_limit].rstrip()}{suffix}"
 
 
 def _apply_guardrails(text: str, mode: Intent | None = None) -> str:

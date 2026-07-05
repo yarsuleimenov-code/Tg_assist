@@ -97,9 +97,12 @@ OPENAI_API_KEY=
 DEEPSEEK_API_BASE=https://api.deepseek.com/v1
 DEEPSEEK_MODEL=deepseek-chat
 MAX_CONTEXT_CHARS=6000
+LOG_CHAT_ID=
 ```
 
 `OPENAI_API_KEY` используется как имя переменной для DeepSeek API key, потому что DeepSeek предоставляет OpenAI-compatible API.
+
+`LOG_CHAT_ID` опционален. Если указать ID группы или чата, бот будет отправлять туда краткий отчет по каждому взаимодействию: пользователь, вопрос и ответ. Бот должен быть добавлен в эту группу.
 
 ## Docker
 
