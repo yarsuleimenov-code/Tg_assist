@@ -86,17 +86,26 @@ def create_router(
             await _answer(message, GREETING_MESSAGE, log_chat_id=log_chat_id)
             return
 
+        fast_answer = _fast_answer_text(question, knowledge_base)
+        if fast_answer:
+            logging.info("Fast answer chat_id=%s user_id=%s text=%r", chat_id, user_id, question)
+            memory.update(chat_id, "fast_answer", _fast_answer_topic(question), question)
+            await _answer(message, fast_answer, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
+            return
+
         route = route_intent(question)
+        llm_router_used = route.needs_llm
         if route.needs_llm:
             route = await _resolve_low_confidence_route(question, route, openai_client, chat_id)
 
         logging.info(
-            "Incoming question chat_id=%s user_id=%s intent=%s confidence=%.2f topic=%s text=%r",
+            "Incoming question chat_id=%s user_id=%s intent=%s confidence=%.2f topic=%s llm_router=%s text=%r",
             chat_id,
             user_id,
             route.intent.value,
             route.confidence,
             route.topic,
+            llm_router_used,
             question,
         )
 
@@ -127,8 +136,13 @@ def create_router(
             return
 
         if route.intent == Intent.CLARIFICATION:
+            previous_topic = memory.get_state(chat_id).last_topic
             memory.update(chat_id, route.intent.value, route.topic, question)
-            await _answer(message, _clarification_message(), log_chat_id=log_chat_id)
+            await _answer(
+                message,
+                _clarification_message(previous_topic),
+                log_chat_id=log_chat_id,
+            )
             return
 
         memory.update(chat_id, route.intent.value, route.topic, question)
@@ -175,6 +189,14 @@ async def _answer_portfolio_question(
         await _answer(message, NO_INFORMATION_MESSAGE, log_chat_id=log_chat_id)
         return
 
+    logging.info(
+        "Portfolio context chat_id=%s matches=%s context_chars=%s top_sources=%s",
+        chat_id,
+        len(matches),
+        len(context),
+        [match.chunk.source_file for match in matches[:3]],
+    )
+
     try:
         answer = await openai_client.generate_answer(
             question=question,
@@ -187,6 +209,7 @@ async def _answer_portfolio_question(
         return
 
     memory.update(chat_id, route.intent.value, route.topic, question)
+    logging.info("Portfolio answer chat_id=%s answer_chars=%s", chat_id, len(answer or ""))
     await _answer(message, answer or NO_INFORMATION_MESSAGE, mode=route.intent, log_chat_id=log_chat_id)
 
 
@@ -210,6 +233,7 @@ async def _answer_professional_question(
         return
 
     memory.update(chat_id, route.intent.value, route.topic, question)
+    logging.info("Professional answer chat_id=%s answer_chars=%s", chat_id, len(answer or ""))
     await _answer(message, answer or TECHNICAL_ERROR_MESSAGE, mode=route.intent, log_chat_id=log_chat_id)
 
 
@@ -298,6 +322,74 @@ def _is_greeting(text: str) -> bool:
     }
 
 
+def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | None:
+    normalized = " ".join(question.lower().strip().split())
+
+    if normalized in {
+        "что ты умеешь",
+        "что умеешь",
+        "помощь",
+        "команды",
+        "help",
+        "что можно спросить",
+    }:
+        return "\n".join(
+            [
+                GREETING_MESSAGE,
+                "",
+                "Можно спросить:",
+                "- какие проекты есть в портфолио;",
+                "- какие навыки релевантны для BA-роли;",
+                "- где посмотреть GitHub, LinkedIn или резюме;",
+                "- как подойти к MVP, требованиям, KPI или процессам.",
+            ]
+        )
+
+    if normalized in {"покажи проекты", "список проектов", "проекты", "дай проекты"}:
+        return knowledge_base.get_document_text("projects.md")
+
+    if normalized in {"покажи навыки", "список навыков", "навыки", "дай навыки"}:
+        return knowledge_base.get_document_text("skills.md")
+
+    if normalized in {
+        "покажи ссылки",
+        "дай ссылки",
+        "ссылки",
+        "контакты",
+        "github",
+        "linkedin",
+        "резюме",
+    }:
+        return knowledge_base.get_document_text("links.md")
+
+    if normalized in {
+        "что ты знаешь",
+        "кто кандидат",
+        "кто такой ярослав",
+        "кто такой ярослав сулейменов",
+        "расскажи о кандидате",
+        "расскажи про кандидата",
+        "что знаешь о ярославе",
+        "профиль кандидата",
+    }:
+        return knowledge_base.get_document_text("profile.md")
+
+    return None
+
+
+def _fast_answer_topic(question: str) -> str:
+    normalized = " ".join(question.lower().strip().split())
+    if "проект" in normalized:
+        return "projects"
+    if "навык" in normalized:
+        return "skills"
+    if any(marker in normalized for marker in ("ссыл", "github", "linkedin", "резюме", "контакт")):
+        return "links"
+    if "кандидат" in normalized or "ярослав" in normalized:
+        return "profile"
+    return "capabilities"
+
+
 def _apply_guardrails(text: str, mode: Intent | None = None) -> str:
     cleaned = _format_telegram_text(text)
     if mode in {Intent.PORTFOLIO, Intent.PROFESSIONAL} and len(cleaned) > MAX_ANSWER_CHARS:
@@ -351,7 +443,14 @@ def _trim_to_limit(text: str, limit: int) -> str:
     return f"{trimmed}.{suffix}"
 
 
-def _clarification_message() -> str:
+def _clarification_message(last_topic: str = "") -> str:
+    if last_topic in {"projects", "skills", "links", "profile"}:
+        return (
+            "Уточните, пожалуйста, что именно раскрыть дальше.\n"
+            "1. Нужен краткий ответ по портфолио кандидата или профессиональный BA-комментарий?\n"
+            "2. Какой аспект важнее: бизнес-задача, роль кандидата, результат или ссылка?"
+        )
+
     return (
         "Уточните, пожалуйста, контекст.\n"
         "1. Вопрос про кандидата и его портфолио или про профессиональную BA-тему?\n"

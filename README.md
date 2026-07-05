@@ -18,10 +18,11 @@ MVP цифрового помощника ИИслава для портфоли
 1. HR задает вопрос о кандидате.
 2. Бот определяет intent: `portfolio_question`, `professional_question`, `clarification_needed` или `out_of_scope`.
 3. Сначала используется rule-based routing. LLM-router вызывается только при низкой уверенности.
-4. Для portfolio-вопроса бот ищет релевантные чанки в `knowledge/*.md` и передает в DeepSeek только top relevant chunks.
-5. Модель отвечает о кандидате только на основании подготовленных материалов.
-6. Для professional-вопроса бот отвечает через DeepSeek кратко, без генерации полноценных BA-документов и без выдумывания фактов о кандидате.
-7. Для быстрых сценариев есть команды `/projects`, `/skills`, `/links`.
+4. Частые запросы вроде приветствия, списка проектов, навыков, ссылок и профиля закрываются без LLM.
+5. Для portfolio-вопроса бот ищет релевантные чанки в `knowledge/*.md` через keyword search, metadata scoring и synonyms.
+6. Модель отвечает о кандидате только на основании подготовленных материалов.
+7. Для professional-вопроса бот отвечает через DeepSeek кратко, без генерации полноценных BA-документов и без выдумывания фактов о кандидате.
+8. Для быстрых сценариев есть команды `/projects`, `/skills`, `/links`.
 
 ## Структура
 
@@ -134,7 +135,7 @@ docker run --env-file .env ba-portfolio-assistant
 
 ## Ограничения MVP
 
-- Поиск релевантности простой chunked keyword-based, без vector database.
+- Поиск релевантности простой chunked keyword-based с synonyms и metadata scoring, без vector database.
 - Память минимальная: last mode, last topic, last user question. Полная история диалога не хранится.
 - Нет админ-панели для редактирования knowledge base.
 - Нет авторизации пользователей.

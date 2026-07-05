@@ -29,6 +29,31 @@ STOP_WORDS = {
     "with",
 }
 
+SYNONYMS = {
+    "склад": ("warehouse", "loading", "логистика"),
+    "складской": ("warehouse", "loading", "логистика"),
+    "загрузка": ("loading", "warehouse", "trip"),
+    "отгрузка": ("loading", "warehouse", "trip"),
+    "приемка": ("unloading", "warehouse", "trip"),
+    "калькулятор": ("calculator", "smartquote", "zaberman", "pricing"),
+    "расчет": ("calculator", "pricing", "quote"),
+    "расчёт": ("calculator", "pricing", "quote"),
+    "коммерческое": ("quote", "smartquote", "pricing"),
+    "предложение": ("quote", "smartquote", "pricing"),
+    "клиенты": ("client", "crm", "tracker"),
+    "клиент": ("client", "crm", "tracker"),
+    "меню": ("family menu", "foodtech", "planning"),
+    "еда": ("family menu", "foodtech"),
+    "дашборд": ("dashboard", "analytics", "bi"),
+    "отчет": ("reporting", "analytics", "dashboard"),
+    "отчёт": ("reporting", "analytics", "dashboard"),
+    "аналитика": ("analytics", "dashboard", "olap"),
+    "витрина": ("olap", "analytics", "dashboard"),
+    "данные": ("data", "analytics", "olap"),
+    "mvp": ("product", "hypothesis", "scope"),
+    "требования": ("requirements", "business analysis", "scope"),
+}
+
 
 @dataclass(frozen=True)
 class KnowledgeDocument:
@@ -80,7 +105,7 @@ class KnowledgeBase:
         self.chunks = chunks
 
     def search(self, query: str, limit: int = 5) -> list[KnowledgeMatch]:
-        tokens = self._tokens(query)
+        tokens = self._expand_tokens(self._tokens(query))
         if not tokens:
             return []
 
@@ -97,7 +122,7 @@ class KnowledgeBase:
                 if token in searchable_title:
                     score += 5
                 if token in searchable_meta:
-                    score += 3
+                    score += 6
                 score += searchable_content.count(token)
 
             if score > 0:
@@ -283,3 +308,10 @@ class KnowledgeBase:
     def _tokens(text: str) -> set[str]:
         raw_tokens = re.findall(r"[a-zA-Zа-яА-ЯёЁ0-9_+-]+", text.lower())
         return {token for token in raw_tokens if len(token) >= 3 and token not in STOP_WORDS}
+
+    @staticmethod
+    def _expand_tokens(tokens: set[str]) -> set[str]:
+        expanded = set(tokens)
+        for token in tokens:
+            expanded.update(SYNONYMS.get(token, ()))
+        return expanded
