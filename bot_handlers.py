@@ -1,4 +1,5 @@
 import logging
+import re
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -159,8 +160,56 @@ async def _answer_professional_question(
 
 
 async def _answer(message: Message, text: str) -> None:
+    text = _format_telegram_text(text)
     for chunk in _chunks(text.strip(), limit=3900):
         await message.answer(chunk)
+
+
+def _format_telegram_text(text: str) -> str:
+    lines = []
+
+    for raw_line in text.strip().splitlines():
+        line = raw_line.strip()
+
+        if not line:
+            lines.append("")
+            continue
+
+        if re.fullmatch(r"[-*_]{3,}", line):
+            continue
+
+        if _is_markdown_table_separator(line):
+            continue
+
+        if _is_markdown_table_row(line):
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            line = " | ".join(cell for cell in cells if cell)
+
+        line = re.sub(r"^#{1,6}\s*", "", line)
+        line = re.sub(r"^\s*>\s*", "", line)
+        line = re.sub(r"\*\*(.*?)\*\*", r"\1", line)
+        line = re.sub(r"__(.*?)__", r"\1", line)
+        line = re.sub(r"`([^`]+)`", r"\1", line)
+        line = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1: \2", line)
+
+        lines.append(line)
+
+    return _collapse_blank_lines("\n".join(lines))
+
+
+def _is_markdown_table_row(line: str) -> bool:
+    return line.startswith("|") and line.endswith("|") and line.count("|") >= 2
+
+
+def _is_markdown_table_separator(line: str) -> bool:
+    if not _is_markdown_table_row(line):
+        return False
+    cells = [cell.strip() for cell in line.strip("|").split("|")]
+    return all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells if cell)
+
+
+def _collapse_blank_lines(text: str) -> str:
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _chunks(text: str, limit: int) -> list[str]:
