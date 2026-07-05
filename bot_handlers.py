@@ -28,6 +28,33 @@ GREETING_MESSAGE = (
     "Могу ответить на вопросы о его опыте, проектах, навыках и ссылках портфолио. "
     "Также кратко помогаю с профессиональными BA-темами: требования, процессы, KPI, MVP и продуктовая логика."
 )
+PROJECTS_OVERVIEW = "\n".join(
+    [
+        "Проекты Ярослава лучше смотреть как портфолио практического Business Analyst / Product Engineer: не просто код, а кейсы, где бизнес-задача доведена до работающего MVP, понятной логики и демонстрации.",
+        "",
+        "1. SmartQuote / Zaberman Calculator",
+        "Pricing-платформа для moving-бизнеса: quote flow, расчет стоимости, estimate lifecycle, cost breakdown и подготовка к production handoff.",
+        "Ценность: показывает умение разбирать сложную pricing logic и переводить ее в понятный продуктовый интерфейс.",
+        "Демо: https://yarsuleimenov-code.github.io/Zaberman_calc/orders.html",
+        "",
+        "2. Warehouse Control / Loading Control",
+        "Операционный workflow для склада: загрузка, приемка, piece-level tracking, trip reports и контроль статусов.",
+        "Ценность: сильный кейс по процессам, данным, ролям пользователей и MVP для внутренних операций.",
+        "",
+        "3. AI Portfolio Assistant",
+        "Telegram-бот ИИслав: отвечает HR по портфолио, работает с локальной knowledge base, Docker и Google Cloud VM.",
+        "Ценность: демонстрирует end-to-end подход: требования, архитектура, реализация, деплой и улучшение UX.",
+        "",
+        "4. Portfolio / Analytics Hub",
+        "Публичная витрина проектов, опыта, ссылок и аналитических кейсов.",
+        "Демо: https://yarsuleimenov-code.github.io/ys-analytics/",
+        "",
+        "5. Family Menu и IITU OLAP Course",
+        "Дополнительные кейсы по продуктовой логике, планированию, аналитике, BI/OLAP и структурированию знаний.",
+        "",
+        "Если нужно, могу раскрыть любой проект отдельно: бизнес-задача, роль Ярослава, результат, стек или ссылка на демо.",
+    ]
+)
 
 
 def create_router(
@@ -73,7 +100,7 @@ def create_router(
 
     @router.message(Command("projects"))
     async def projects(message: Message) -> None:
-        await _answer(message, knowledge_base.get_document_text("projects.md"), log_chat_id=log_chat_id)
+        await _answer(message, PROJECTS_OVERVIEW, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
 
     @router.message(Command("skills"))
     async def skills(message: Message) -> None:
@@ -356,7 +383,7 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
         )
 
     if normalized in {"/projects", "покажи проекты", "список проектов", "проекты", "дай проекты"}:
-        return knowledge_base.get_document_text("projects.md")
+        return PROJECTS_OVERVIEW
 
     if normalized in {"/skills", "покажи навыки", "список навыков", "навыки", "дай навыки"}:
         return knowledge_base.get_document_text("skills.md")
