@@ -15,6 +15,11 @@ TECHNICAL_ERROR_MESSAGE = "Не удалось сформировать отве
 MAX_ANSWER_CHARS = 1500
 LOG_QUESTION_CHARS = 1000
 LOG_ANSWER_CHARS = 2500
+GREETING_MESSAGE = (
+    "Здравствуйте. Я ИИслав, цифровой помощник Ярослава Сулейменова. "
+    "Могу ответить на вопросы о его опыте, проектах, навыках и ссылках портфолио. "
+    "Также кратко помогаю с профессиональными BA-темами: требования, процессы, KPI, MVP и продуктовая логика."
+)
 
 
 def create_router(
@@ -30,9 +35,7 @@ def create_router(
     async def start(message: Message) -> None:
         await _answer(
             message,
-            "Здравствуйте. Я личный AI-ассистент кандидата Business Analyst. "
-            "Отвечаю на вопросы об опыте, проектах, навыках и ссылках портфолио. "
-            "Также могу кратко обсудить профессиональные темы: требования, процессы, KPI, MVP и продуктовую логику.",
+            GREETING_MESSAGE,
             log_chat_id=log_chat_id,
         )
 
@@ -77,6 +80,11 @@ def create_router(
         question = (message.text or "").strip()
         chat_id = message.chat.id
         user_id = message.from_user.id if message.from_user else None
+
+        if _is_greeting(question):
+            logging.info("Incoming greeting chat_id=%s user_id=%s text=%r", chat_id, user_id, question)
+            await _answer(message, GREETING_MESSAGE, log_chat_id=log_chat_id)
+            return
 
         route = route_intent(question)
         if route.needs_llm:
@@ -275,6 +283,19 @@ def _truncate_for_log(text: str, limit: int) -> str:
     suffix = "\n...[truncated]"
     body_limit = max(0, limit - len(suffix))
     return f"{text[:body_limit].rstrip()}{suffix}"
+
+
+def _is_greeting(text: str) -> bool:
+    normalized = " ".join(text.lower().strip().split())
+    return normalized in {
+        "привет",
+        "здравствуйте",
+        "добрый день",
+        "доброе утро",
+        "добрый вечер",
+        "hello",
+        "hi",
+    }
 
 
 def _apply_guardrails(text: str, mode: Intent | None = None) -> str:
