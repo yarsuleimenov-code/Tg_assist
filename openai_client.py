@@ -2,7 +2,12 @@ import logging
 
 import aiohttp
 
-from prompts import SYSTEM_PROMPT, build_user_prompt
+from prompts import (
+    PORTFOLIO_SYSTEM_PROMPT,
+    PROFESSIONAL_SYSTEM_PROMPT,
+    build_portfolio_prompt,
+    build_professional_prompt,
+)
 
 
 class OpenAIClient:
@@ -17,20 +22,43 @@ class OpenAIClient:
         context: str,
         recent_user_messages: list[str],
     ) -> str:
+        return await self._chat_completion(
+            system_prompt=PORTFOLIO_SYSTEM_PROMPT,
+            user_prompt=build_portfolio_prompt(
+                question=question,
+                context=context,
+                recent_user_messages=recent_user_messages,
+            ),
+            temperature=0.2,
+        )
+
+    async def generate_professional_answer(
+        self,
+        question: str,
+        recent_user_messages: list[str],
+    ) -> str:
+        return await self._chat_completion(
+            system_prompt=PROFESSIONAL_SYSTEM_PROMPT,
+            user_prompt=build_professional_prompt(
+                question=question,
+                recent_user_messages=recent_user_messages,
+            ),
+            temperature=0.4,
+        )
+
+    async def _chat_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+    ) -> str:
         payload = {
             "model": self.model,
-            "temperature": 0.2,
-            "max_tokens": 500,
+            "temperature": temperature,
+            "max_tokens": 700,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": build_user_prompt(
-                        question=question,
-                        context=context,
-                        recent_user_messages=recent_user_messages,
-                    ),
-                },
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
         }
 
