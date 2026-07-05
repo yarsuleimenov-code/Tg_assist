@@ -8,6 +8,7 @@ DEFAULT_KNOWLEDGE_FILES = (
     "projects.md",
     "skills.md",
     "case_studies.md",
+    "evidence.md",
     "links.md",
 )
 

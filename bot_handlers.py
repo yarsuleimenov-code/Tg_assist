@@ -28,6 +28,52 @@ GREETING_MESSAGE = (
     "Могу ответить на вопросы о его опыте, проектах, навыках и ссылках портфолио. "
     "Также кратко помогаю с профессиональными BA-темами: требования, процессы, KPI, MVP и продуктовая логика."
 )
+CANDIDATE_OVERVIEW = "\n".join(
+    [
+        "Ярослав Сулейменов занимается бизнес-анализом на стыке продукта, системной логики и данных.",
+        "",
+        "Коротко о профиле:",
+        "- Business Analyst / Product-oriented BA / System Analyst;",
+        "- сильный фокус на требованиях, MVP scope, процессах, статусах, data contracts и handoff в разработку;",
+        "- практические проекты в логистике, warehouse operations, client tracking, portfolio automation, Family Menu и OLAP education;",
+        "- благодаря опыту B2B-продаж понимает не только требования, но и коммерческий смысл решений: потребность клиента, ценность для бизнеса, маржинальность и операционный результат.",
+        "",
+        "Где он может быть полезен:",
+        "- Junior+/Middle BA или System Analyst роли;",
+        "- продуктовые MVP, внутренние системы, операционные процессы, reporting и интеграционные задачи;",
+        "- ситуации, где нужно быстро превратить бизнес-проблему в понятный scope, сценарии, требования и проверяемый прототип.",
+        "",
+        "Ограничение: факты о размере команд, английском, production impact и прямом fintech-опыте нужно отдельно подтвердить на интервью, если это критично для роли.",
+    ]
+)
+HR_SUMMARY = "\n".join(
+    [
+        "HR summary по Ярославу:",
+        "",
+        "1. Подходящие роли: Business Analyst, Product-oriented BA, Junior+/Middle System Analyst.",
+        "2. Сильные стороны: требования, MVP scope, системная логика, data/reporting, handoff в разработку.",
+        "3. Практика: SmartQuote/Zaberman, Warehouse Control, Client Tracking, Family Menu, AI Portfolio Assistant, IITU OLAP Course.",
+        "4. Бизнес-ценность: опыт B2B-продаж помогает видеть клиентскую потребность, коммерческую ценность и операционный эффект решения.",
+        "5. Что проверить на интервью: SQL на задаче, BPMN/UML при необходимости, английский, размер команд, глубину production-опыта.",
+        "",
+        "Вывод: кандидата стоит рассмотреть для ролей, где нужен аналитик, который умеет структурировать задачу, говорить с бизнесом и доводить идею до понятного MVP или спецификации.",
+    ]
+)
+INTERVIEW_GUIDE = "\n".join(
+    [
+        "Вопросы для интервью с Ярославом:",
+        "",
+        "1. Требования: покажите пример, где вы превратили бизнес-запрос в user stories, acceptance criteria и scope MVP.",
+        "2. Системный анализ: как вы описываете сущности, статусы, lifecycle, data contracts и edge cases?",
+        "3. SmartQuote: какую pricing logic вы формализовали и какие ограничения остались для production version?",
+        "4. Warehouse / Loading Control: какую проблему решал переход к piece-level tracking?",
+        "5. Работа с разработкой: какие материалы вы передаете разработчику, чтобы снизить неоднозначность?",
+        "6. Data / SQL: дайте практическую задачу на выборку, агрегацию, проверку качества данных или KPI.",
+        "7. Риски: какие факты по портфолио пока не подтверждены материалами и требуют отдельной проверки?",
+        "",
+        "Главная цель интервью: проверить не только знание терминов, а способность связать бизнес-ценность, требования, данные и ограничения решения.",
+    ]
+)
 PROJECTS_OVERVIEW = "\n".join(
     [
         "Проекты Ярослава показывают связку Business Analysis, Product Thinking и реализации: от бизнес-задачи до понятного MVP, демо или продуктовой логики.",
@@ -146,7 +192,7 @@ def create_router(
                     "- Чем user story отличается от use case?",
                     "- Как выбрать KPI для dashboard?",
                     "",
-                    "Команды: /projects, /skills, /links",
+                    "Команды: /projects, /skills, /links, /interview",
                 ]
             ),
             log_chat_id=log_chat_id,
@@ -163,6 +209,10 @@ def create_router(
     @router.message(Command("links"))
     async def links(message: Message) -> None:
         await _answer(message, LINKS_OVERVIEW, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
+
+    @router.message(Command("interview"))
+    async def interview(message: Message) -> None:
+        await _answer(message, INTERVIEW_GUIDE, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
 
     @router.message(F.text)
     async def answer_question(message: Message) -> None:
@@ -182,10 +232,21 @@ def create_router(
             await _answer(message, fast_answer, mode=Intent.PORTFOLIO, log_chat_id=log_chat_id)
             return
 
-        route = route_intent(question)
-        llm_router_used = route.needs_llm
-        if route.needs_llm:
-            route = await _resolve_low_confidence_route(question, route, openai_client, chat_id)
+        state = memory.get_state(chat_id)
+        effective_question = _question_with_follow_up_context(question, state)
+        if effective_question != question:
+            route = IntentResult(
+                intent=Intent.PORTFOLIO,
+                confidence=0.88,
+                topic=state.last_topic,
+                reason="portfolio follow-up from memory",
+            )
+            llm_router_used = False
+        else:
+            route = route_intent(question)
+            llm_router_used = route.needs_llm
+            if route.needs_llm:
+                route = await _resolve_low_confidence_route(question, route, openai_client, chat_id)
 
         logging.info(
             "Incoming question chat_id=%s user_id=%s intent=%s confidence=%.2f topic=%s llm_router=%s text=%r",
@@ -201,7 +262,7 @@ def create_router(
         if route.intent == Intent.PORTFOLIO:
             await _answer_portfolio_question(
                 message=message,
-                question=question,
+                question=effective_question,
                 route=route,
                 chat_id=chat_id,
                 knowledge_base=knowledge_base,
@@ -297,7 +358,8 @@ async def _answer_portfolio_question(
         await _answer(message, TECHNICAL_ERROR_MESSAGE, log_chat_id=log_chat_id)
         return
 
-    memory.update(chat_id, route.intent.value, route.topic, question)
+    topic = _portfolio_topic_from_matches(matches, route.topic)
+    memory.update(chat_id, route.intent.value, topic, question)
     logging.info("Portfolio answer chat_id=%s answer_chars=%s", chat_id, len(answer or ""))
     await _answer(message, answer or NO_INFORMATION_MESSAGE, mode=route.intent, log_chat_id=log_chat_id)
 
@@ -413,7 +475,7 @@ def _is_greeting(text: str) -> bool:
 
 
 def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | None:
-    normalized = " ".join(question.lower().strip().split())
+    normalized = _normalize_user_text(question)
 
     if normalized in {
         "что ты умеешь",
@@ -435,6 +497,44 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
                 "- как подойти к MVP, требованиям, KPI или процессам.",
             ]
         )
+
+    if normalized in {
+        "чем он занимается",
+        "чем занимается",
+        "что он делает",
+        "что делает кандидат",
+        "кто такой ярослав",
+        "кто такой ярослав сулейменов",
+        "какой у него опыт",
+        "какой опыт",
+        "опыт кандидата",
+        "расскажи о кандидате",
+        "расскажи про кандидата",
+        "что знаешь о ярославе",
+        "профиль кандидата",
+    }:
+        return CANDIDATE_OVERVIEW
+
+    if normalized in {
+        "почему его стоит рассмотреть",
+        "почему стоит рассмотреть",
+        "стоит ли пригласить на интервью",
+        "пригласить на интервью",
+        "hr summary",
+        "краткое резюме",
+        "кратко для hr",
+        "резюме для hr",
+    }:
+        return HR_SUMMARY
+
+    if normalized in {
+        "/interview",
+        "вопросы для интервью",
+        "что спросить на интервью",
+        "как проверить кандидата",
+        "план интервью",
+    }:
+        return INTERVIEW_GUIDE
 
     if normalized in {"/projects", "покажи проекты", "список проектов", "проекты", "дай проекты"}:
         return PROJECTS_OVERVIEW
@@ -470,16 +570,90 @@ def _fast_answer_text(question: str, knowledge_base: KnowledgeBase) -> str | Non
 
 
 def _fast_answer_topic(question: str) -> str:
-    normalized = " ".join(question.lower().strip().split())
+    normalized = _normalize_user_text(question)
+    if any(marker in normalized for marker in ("interview", "интервью", "проверить кандидата")):
+        return "interview"
+    if any(marker in normalized for marker in ("hr summary", "краткое резюме", "рассмотреть", "пригласить")):
+        return "hr_summary"
     if "проект" in normalized:
         return "projects"
     if "навык" in normalized:
         return "skills"
     if any(marker in normalized for marker in ("ссыл", "github", "linkedin", "резюме", "контакт")):
         return "links"
-    if "кандидат" in normalized or "ярослав" in normalized:
+    if any(marker in normalized for marker in ("кандидат", "ярослав", "чем занимается", "опыт")):
         return "profile"
     return "capabilities"
+
+
+def _question_with_follow_up_context(question: str, state) -> str:
+    if not _is_portfolio_follow_up(question):
+        return question
+    if state.last_mode not in {Intent.PORTFOLIO.value, "fast_answer"}:
+        return question
+    if not _is_project_topic(state.last_topic):
+        return question
+    return f"{state.last_topic}. {question}"
+
+
+def _is_portfolio_follow_up(question: str) -> bool:
+    normalized = _normalize_user_text(question)
+    if len(normalized) > 120:
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "какие результаты",
+            "результаты",
+            "достижения",
+            "какая роль",
+            "роль",
+            "стек",
+            "статус",
+            "ограничения",
+            "ссылки",
+            "демо",
+            "что сделал",
+            "что было сделано",
+            "какая ценность",
+        )
+    )
+
+
+def _is_project_topic(topic: str) -> bool:
+    if not topic or topic in {"projects", "skills", "links", "profile", "hr_summary", "interview"}:
+        return False
+    normalized = topic.lower()
+    return any(
+        marker in normalized
+        for marker in (
+            "smartquote",
+            "zaberman",
+            "warehouse",
+            "loading",
+            "client",
+            "family",
+            "olap",
+            "iitu",
+            "portfolio assistant",
+            "ai portfolio",
+            "ys-analytics",
+            "push notifications",
+        )
+    )
+
+
+def _portfolio_topic_from_matches(matches, fallback: str) -> str:
+    for match in matches:
+        project = match.chunk.project.strip()
+        if project and project.lower() not in {"profile", "skills", "links", "portfolio"}:
+            return project
+    return fallback or "portfolio"
+
+
+def _normalize_user_text(text: str) -> str:
+    normalized = " ".join(text.lower().strip().split())
+    return re.sub(r"[?!.,:;]+$", "", normalized).strip()
 
 
 def _apply_guardrails(text: str, mode: Intent | None = None) -> str:

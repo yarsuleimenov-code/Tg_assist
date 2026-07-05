@@ -46,6 +46,25 @@ PORTFOLIO_TERMS = (
     "ys-analytics",
     "olap",
     "iitu",
+    "опыт кандидата",
+    "работа с разработчиками",
+    "работал с разработчиками",
+    "developer handoff",
+    "английский у кандидата",
+    "какой у него английский",
+    "английский",
+    "уровень английского",
+    "размер команды",
+    "размер команд",
+    "team size",
+    "sql у кандидата",
+    "опыт sql",
+    "api у кандидата",
+    "опыт api",
+    "опыт интеграций",
+    "опыт bpmn",
+    "fintech fit",
+    "подходит для fintech",
 )
 
 GENERAL_PORTFOLIO_TERMS = (
@@ -60,7 +79,16 @@ GENERAL_PORTFOLIO_TERMS = (
     "о ярославе",
     "чем полезен кандидат",
     "что умеет кандидат",
+    "чем он занимается",
+    "чем занимается",
+    "что он делает",
+    "что делает кандидат",
+    "какой у него опыт",
+    "какой опыт",
     "почему его стоит",
+    "почему стоит рассмотреть",
+    "пригласить на интервью",
+    "стоит ли пригласить",
     "профиль кандидата",
 )
 
@@ -143,7 +171,9 @@ def route_intent(text: str) -> IntentResult:
             reason="matched out-of-scope term",
         )
 
-    if len(tokens) <= 2 and not _contains_any(normalized, PORTFOLIO_TERMS + PROFESSIONAL_TERMS):
+    if len(tokens) <= 2 and not _contains_any(
+        normalized, PORTFOLIO_TERMS + GENERAL_PORTFOLIO_TERMS + PROFESSIONAL_TERMS
+    ):
         return IntentResult(
             intent=Intent.CLARIFICATION,
             confidence=0.9,
